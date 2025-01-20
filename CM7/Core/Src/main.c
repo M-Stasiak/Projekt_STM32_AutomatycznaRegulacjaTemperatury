@@ -28,7 +28,9 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "lm35.h"
+#include "pwm.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,8 +55,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+PWM_HandleTypeDef hpwm1 = PWM_INIT_HANDLE(&htim3, TIM_CHANNEL_1);
 uint8_t rx_buffer[256];
 uint8_t tx_buffer[256];
+int value = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,11 +73,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if (huart == &huart3)
 	{
-		HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-		memset(tx_buffer, 0, sizeof(tx_buffer));
-		int tx_n = snprintf((char*)tx_buffer, sizeof(tx_buffer), "\rOdebrano dane: %s\r", (char*)rx_buffer);
-		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
-		HAL_UART_Receive_IT(&huart3, rx_buffer, 4);
+		//HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+		//memset(tx_buffer, 0, sizeof(tx_buffer));
+		//int tx_n = snprintf((char*)tx_buffer, sizeof(tx_buffer), "\rOdebrano dane: %s\r", (char*)rx_buffer);
+		//HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
+		value = strtol((char*)&rx_buffer[0], 0, 10);
+		PWM_WriteDuty(&hpwm1, value);
+		HAL_UART_Receive_IT(&huart3, rx_buffer, 3);
 	}
 }
 
@@ -82,8 +88,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if (htim == &htim6)
 	{
 		float LM35_Temperature = LM35_GetTemp(&hadc1);
+		int PWM_Duty = PWM_ReadDuty(&hpwm1);
 		memset(tx_buffer, 0, sizeof(tx_buffer));
-		int tx_n = sprintf((char*)tx_buffer, "\rTemperatura: %.2f°C\r", LM35_Temperature);
+		int tx_n = sprintf((char*)tx_buffer, "\rTemperatura: %.1f°C, PWM Duty: %d   \r", LM35_Temperature, PWM_Duty);
 		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 	}
 }
@@ -150,9 +157,12 @@ Error_Handler();
   MX_USART3_UART_Init();
   MX_TIM6_Init();
   MX_ADC1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
+  //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  PWM_Init(&hpwm1);
   HAL_TIM_Base_Start_IT(&htim6);
-  HAL_UART_Receive_IT(&huart3, rx_buffer, 4);
+  HAL_UART_Receive_IT(&huart3, rx_buffer, 3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
