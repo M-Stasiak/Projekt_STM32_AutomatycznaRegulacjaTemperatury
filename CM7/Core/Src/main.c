@@ -18,10 +18,17 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "memorymap.h"
+#include "tim.h"
+#include "usart.h"
+#include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
+#include "lm35.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,7 +53,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+uint8_t rx_buffer[256];
+uint8_t tx_buffer[256];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -57,7 +65,28 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	if (huart == &huart3)
+	{
+		HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+		memset(tx_buffer, 0, sizeof(tx_buffer));
+		int tx_n = snprintf((char*)tx_buffer, sizeof(tx_buffer), "\rOdebrano dane: %s\r", (char*)rx_buffer);
+		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
+		HAL_UART_Receive_IT(&huart3, rx_buffer, 4);
+	}
+}
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim == &htim6)
+	{
+		float LM35_Temperature = LM35_GetTemp(&hadc1);
+		memset(tx_buffer, 0, sizeof(tx_buffer));
+		int tx_n = sprintf((char*)tx_buffer, "\rTemperatura: %.2f°C\r", LM35_Temperature);
+		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -117,8 +146,13 @@ Error_Handler();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART3_UART_Init();
+  MX_TIM6_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_UART_Receive_IT(&huart3, rx_buffer, 4);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -151,6 +185,10 @@ void SystemClock_Config(void)
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
+  /** Macro to configure the PLL clock source
+  */
+  __HAL_RCC_PLL_PLLSOURCE_CONFIG(RCC_PLLSOURCE_HSI);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
@@ -172,7 +210,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
