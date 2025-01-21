@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include "lm35.h"
 #include "pwm.h"
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,9 +57,9 @@
 
 /* USER CODE BEGIN PV */
 PWM_HandleTypeDef hpwm1 = PWM_INIT_HANDLE(&htim3, TIM_CHANNEL_1);
+PID_HandleTypeDef hpid1;
 uint8_t rx_buffer[256];
 uint8_t tx_buffer[256];
-int value = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,9 +78,24 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 		//memset(tx_buffer, 0, sizeof(tx_buffer));
 		//int tx_n = snprintf((char*)tx_buffer, sizeof(tx_buffer), "\rOdebrano dane: %s\r", (char*)rx_buffer);
 		//HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
-		value = strtol((char*)&rx_buffer[0], 0, 10);
-		PWM_WriteDuty(&hpwm1, value);
-		HAL_UART_Receive_IT(&huart3, rx_buffer, 3);
+		float value = strtol((char*)&rx_buffer[1], 0, 10);
+		if (rx_buffer[0] == 's')
+		{
+			PID_SetReference(&hpid1, value);
+		}
+		else if (rx_buffer[0] == 'p')
+		{
+			PID_SetTunings(&hpid1, value/100, hpid1.Ki, hpid1.Kd);
+		}
+		else if (rx_buffer[0] == 'i')
+		{
+			PID_SetTunings(&hpid1, hpid1.Kp, value/100, hpid1.Kd);
+		}
+		else if (rx_buffer[0] == 'd')
+		{
+			PID_SetTunings(&hpid1, hpid1.Kp, hpid1.Ki, value/100);
+		}
+		HAL_UART_Receive_IT(&huart3, rx_buffer, 5);
 	}
 }
 
@@ -88,9 +104,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if (htim == &htim6)
 	{
 		float LM35_Temperature = LM35_GetTemp(&hadc1);
+		int u = (int)PID_Calculate(&hpid1, LM35_Temperature);
+		PWM_WriteDuty(&hpwm1, (int)u);
 		int PWM_Duty = PWM_ReadDuty(&hpwm1);
 		memset(tx_buffer, 0, sizeof(tx_buffer));
-		int tx_n = sprintf((char*)tx_buffer, "\rTemperatura: %.1f°C, PWM Duty: %d   \r", LM35_Temperature, PWM_Duty);
+		int tx_n = sprintf((char*)tx_buffer, "Temperatura: %.1f, PWM Duty: %d, SetPoint: %d, kp: %.3f, ki: %.3f, kd: %.3f\r", LM35_Temperature, PWM_Duty, (int)hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
 		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 	}
 }
@@ -161,8 +179,9 @@ Error_Handler();
   /* USER CODE BEGIN 2 */
   //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   PWM_Init(&hpwm1);
+  PID_Init(&hpid1, 20, 0.5, 0.5, 30, 100, 0);
   HAL_TIM_Base_Start_IT(&htim6);
-  HAL_UART_Receive_IT(&huart3, rx_buffer, 3);
+  HAL_UART_Receive_IT(&huart3, rx_buffer, 5);
   /* USER CODE END 2 */
 
   /* Infinite loop */
