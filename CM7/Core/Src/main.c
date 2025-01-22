@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "i2c.h"
 #include "memorymap.h"
 #include "tim.h"
 #include "usart.h"
@@ -32,6 +33,7 @@
 #include "lm35.h"
 #include "pwm.h"
 #include "pid.h"
+#include "i2c_lcd.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,16 +52,18 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define MyI2C_LCD I2C_LCD_1
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
 PWM_HandleTypeDef hpwm1 = PWM_INIT_HANDLE(&htim3, TIM_CHANNEL_1);
-PID_HandleTypeDef hpid1;
+PID_HandleTypeDef hpid1 = PID_INIT_HANDLE(200, 15, 10, 30, 100, 0);
+I2C_LCD_HandleTypeDef hi2c_lcd1 = I2C_LCD_INIT_HANDLE(&hi2c1, 0x27, 16, 2);
 uint8_t rx_buffer[256];
 uint8_t tx_buffer[256];
+int cnt = 1;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,11 +107,24 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim == &htim6)
 	{
+		char result[16];
 		float LM35_Temperature = LM35_GetTemp(&hadc1);
 		int u = (int)PID_Calculate(&hpid1, LM35_Temperature);
 		PWM_WriteDuty(&hpwm1, (int)u);
 		int PWM_Duty = PWM_ReadDuty(&hpwm1);
 		memset(tx_buffer, 0, sizeof(tx_buffer));
+
+		if (cnt%10 == 0)
+		{
+			cnt = 1;
+			sprintf(result, "TEMP: %.1f   ", LM35_Temperature);
+			I2C_LCD_SetCursor(&hi2c_lcd1, 0, 0);
+			I2C_LCD_WriteString(&hi2c_lcd1, result);
+			sprintf(result, "PWM:  %d%%   ", PWM_Duty);
+			I2C_LCD_SetCursor(&hi2c_lcd1, 0, 1);
+			I2C_LCD_WriteString(&hi2c_lcd1, result);
+		}
+		else cnt++;
 		int tx_n = sprintf((char*)tx_buffer, "Temperatura: %.1f, PWM Duty: %d, SetPoint: %d, kp: %.3f, ki: %.3f, kd: %.3f\r", LM35_Temperature, PWM_Duty, (int)hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
 		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 	}
@@ -176,10 +193,11 @@ Error_Handler();
   MX_TIM6_Init();
   MX_ADC1_Init();
   MX_TIM3_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   PWM_Init(&hpwm1);
-  PID_Init(&hpid1, 20, 0.5, 0.5, 30, 100, 0);
+  I2C_LCD_Init(&hi2c_lcd1);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_UART_Receive_IT(&huart3, rx_buffer, 5);
   /* USER CODE END 2 */

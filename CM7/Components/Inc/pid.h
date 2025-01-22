@@ -27,11 +27,14 @@ typedef struct {
 
 /* Public macro --------------------------------------------------------------*/
 #ifdef USE_HAL_DRIVER
-#define PID_INIT_HANDLE(TIMER_HANDLE, CHANNEL) \
-  {                                            \
-    .htim = TIMER_HANDLE,                     \
-    .Channel = CHANNEL,                        \
-    .Duty = 0                                  \
+#define PID_INIT_HANDLE(KP, KI, KD, SETPOINT, ANTIWINDUP_UPPERLIMIT, ANTIWINDUP_LOWERLIMIT) \
+  {                                                                                         \
+    .Kp = KP,                                                                               \
+	.Ki = KI,                                                                               \
+	.Kd = KD,                                                                               \
+	.SetPoint = SETPOINT,                                                                   \
+	.anti_windup_upperLimit = ANTIWINDUP_UPPERLIMIT,                                        \
+    .anti_windup_lowerLimit = ANTIWINDUP_LOWERLIMIT                                         \
   }
 #endif
 
