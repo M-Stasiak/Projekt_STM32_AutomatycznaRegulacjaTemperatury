@@ -3,8 +3,8 @@
   * @file     : i2c_lcd.h
   * @author   : MS    Mateusz.Stasiak@student.put.poznan.pl
   * @version  : 1.0.0
-  * @date     : Jan 20, 2025
-  * @brief    : Driver for handling the LM35 temperature sensor.
+  * @date     : Jan 21, 2025
+  * @brief    : Driver for controlling an I2C-based LCD display.
   *
   ******************************************************************************
   */

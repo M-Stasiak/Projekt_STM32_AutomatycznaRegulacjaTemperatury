@@ -34,6 +34,7 @@
 #include "pwm.h"
 #include "pid.h"
 #include "i2c_lcd.h"
+#include "pot.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,7 +53,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define MyI2C_LCD I2C_LCD_1
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -64,28 +65,46 @@ I2C_LCD_HandleTypeDef hi2c_lcd1 = I2C_LCD_INIT_HANDLE(&hi2c1, 0x27, 16, 2);
 uint8_t rx_buffer[256];
 uint8_t tx_buffer[256];
 int cnt = 1;
+int Edit = 0;
+float NewSetPoint = 0;
+float LM35_Temperature = 0;
+int PWM_Duty = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void PeriphCommonClock_Config(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if (GPIO_Pin == Button_Pin)
+	{
+		if (Edit == 0)
+		{
+			Edit = 1;
+			HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
+		}
+		else
+		{
+			Edit = 0;
+			PID_SetReference(&hpid1, NewSetPoint);
+			HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_RESET);
+		}
+	}
+}
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if (huart == &huart3)
 	{
-		//HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
-		//memset(tx_buffer, 0, sizeof(tx_buffer));
-		//int tx_n = snprintf((char*)tx_buffer, sizeof(tx_buffer), "\rOdebrano dane: %s\r", (char*)rx_buffer);
-		//HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 		float value = strtol((char*)&rx_buffer[1], 0, 10);
 		if (rx_buffer[0] == 's')
 		{
-			PID_SetReference(&hpid1, value);
+			PID_SetReference(&hpid1, value/100);
 		}
 		else if (rx_buffer[0] == 'p')
 		{
@@ -108,13 +127,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	if (htim == &htim6)
 	{
 		char result[16];
-		float LM35_Temperature = LM35_GetTemp(&hadc1);
+		NewSetPoint = (float)POT_GetReg(&hadc3)/1000;
+		LM35_Temperature = LM35_GetTemp(&hadc1);
 		int u = (int)PID_Calculate(&hpid1, LM35_Temperature);
-		PWM_WriteDuty(&hpwm1, (int)u);
-		int PWM_Duty = PWM_ReadDuty(&hpwm1);
-		memset(tx_buffer, 0, sizeof(tx_buffer));
+		PWM_WriteDuty(&hpwm1, u);
+		PWM_Duty = PWM_ReadDuty(&hpwm1);
 
-		if (cnt%10 == 0)
+		if (cnt%3 == 0)
 		{
 			cnt = 1;
 			sprintf(result, "TEMP: %.1f   ", LM35_Temperature);
@@ -123,9 +142,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			sprintf(result, "PWM:  %d%%   ", PWM_Duty);
 			I2C_LCD_SetCursor(&hi2c_lcd1, 0, 1);
 			I2C_LCD_WriteString(&hi2c_lcd1, result);
+			sprintf(result, "%.1f   ", hpid1.SetPoint);
+			I2C_LCD_SetCursor(&hi2c_lcd1, 12, 0);
+			I2C_LCD_WriteString(&hi2c_lcd1, result);
+			if (Edit == 1)
+			{
+				sprintf(result, "%.1f ", NewSetPoint);
+				I2C_LCD_SetCursor(&hi2c_lcd1, 12, 1);
+				I2C_LCD_WriteString(&hi2c_lcd1, result);
+			}
+			else
+			{
+				I2C_LCD_SetCursor(&hi2c_lcd1, 12, 1);
+				I2C_LCD_WriteString(&hi2c_lcd1, "    ");
+			}
 		}
 		else cnt++;
-		int tx_n = sprintf((char*)tx_buffer, "Temperatura: %.1f, PWM Duty: %d, SetPoint: %d, kp: %.3f, ki: %.3f, kd: %.3f\r", LM35_Temperature, PWM_Duty, (int)hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
+
+		memset(tx_buffer, 0, sizeof(tx_buffer));
+		int tx_n = sprintf((char*)tx_buffer, "\rT: %.1f, PWM: %d, S: %.1f, P: %.3f, I: %.3f, D: %.3f   \r", LM35_Temperature, PWM_Duty, hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
 		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 	}
 }
@@ -165,6 +200,9 @@ int main(void)
 
   /* Configure the system clock */
   SystemClock_Config();
+
+  /* Configure the peripherals common clocks */
+  PeriphCommonClock_Config();
 /* USER CODE BEGIN Boot_Mode_Sequence_2 */
 /* When system initialization is finished, Cortex-M7 will release Cortex-M4 by means of
 HSEM notification */
@@ -194,6 +232,7 @@ Error_Handler();
   MX_ADC1_Init();
   MX_TIM3_Init();
   MX_I2C1_Init();
+  MX_ADC3_Init();
   /* USER CODE BEGIN 2 */
   //HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
   PWM_Init(&hpwm1);
@@ -262,6 +301,32 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+}
+
+/**
+  * @brief Peripherals Common Clock Configuration
+  * @retval None
+  */
+void PeriphCommonClock_Config(void)
+{
+  RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+
+  /** Initializes the peripherals clock
+  */
+  PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInitStruct.PLL2.PLL2M = 4;
+  PeriphClkInitStruct.PLL2.PLL2N = 10;
+  PeriphClkInitStruct.PLL2.PLL2P = 2;
+  PeriphClkInitStruct.PLL2.PLL2Q = 2;
+  PeriphClkInitStruct.PLL2.PLL2R = 2;
+  PeriphClkInitStruct.PLL2.PLL2RGE = RCC_PLL2VCIRANGE_3;
+  PeriphClkInitStruct.PLL2.PLL2VCOSEL = RCC_PLL2VCOMEDIUM;
+  PeriphClkInitStruct.PLL2.PLL2FRACN = 0;
+  PeriphClkInitStruct.AdcClockSelection = RCC_ADCCLKSOURCE_PLL2;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK)
   {
     Error_Handler();
   }
