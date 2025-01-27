@@ -59,8 +59,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+LM35_Filter_HandleTypeDef hfilter1 = LM35_FILTER_INIT_HANDLE(0.1f);
 PWM_HandleTypeDef hpwm1 = PWM_INIT_HANDLE(&htim3, TIM_CHANNEL_1);
-PID_HandleTypeDef hpid1 = PID_INIT_HANDLE(200, 15, 10, 30, 100, 0);
+PID_HandleTypeDef hpid1 = PID_INIT_HANDLE(60, 4, 8, 20, 100, 0);
 I2C_LCD_HandleTypeDef hi2c_lcd1 = I2C_LCD_INIT_HANDLE(&hi2c1, 0x27, 16, 2);
 uint8_t rx_buffer[256];
 uint8_t tx_buffer[256];
@@ -128,7 +129,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	{
 		char result[16];
 		NewSetPoint = (float)POT_GetReg(&hadc3)/1000;
-		LM35_Temperature = LM35_GetTemp(&hadc1);
+		LM35_Temperature = LM35_GetTemp(&hadc1, &hfilter1);
 		int u = (int)PID_Calculate(&hpid1, LM35_Temperature);
 		PWM_WriteDuty(&hpwm1, u);
 		PWM_Duty = PWM_ReadDuty(&hpwm1);
@@ -160,7 +161,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		else cnt++;
 
 		memset(tx_buffer, 0, sizeof(tx_buffer));
-		int tx_n = sprintf((char*)tx_buffer, "\rT: %.1f, PWM: %d, S: %.1f, P: %.3f, I: %.3f, D: %.3f   \r", LM35_Temperature, PWM_Duty, hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
+		int tx_n = sprintf((char*)tx_buffer, "T: %.1f, PWM: %d, S: %.1f, P: %.3f, I: %.3f, D: %.3f   \n", LM35_Temperature, PWM_Duty, hpid1.SetPoint, hpid1.Kp, hpid1.Ki, hpid1.Kd);
 		HAL_UART_Transmit(&huart3, tx_buffer, tx_n, 100);
 	}
 }

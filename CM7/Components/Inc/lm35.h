@@ -18,7 +18,10 @@
 #endif
 
 /* Public typedef ------------------------------------------------------------*/
-
+typedef struct {
+    float alpha;
+    float filtered_value;
+} LM35_Filter_HandleTypeDef;
 
 /* Public define -------------------------------------------------------------*/
 #define ADC_BIT_RES      16      // [bits]
@@ -33,10 +36,41 @@
                                                        0.0f, ADC_REG_MAX,    \
                                                        0.0f, ADC_VOLTAGE_MAX))
 
+#ifdef USE_HAL_DRIVER
+#define LM35_FILTER_INIT_HANDLE(ALPHA) \
+  {                                    \
+    .alpha = ALPHA,                    \
+	.filtered_value = 0.0f			   \
+  }
+#endif
+
 /* Public variables ----------------------------------------------------------*/
 
 /* Public function prototypes ------------------------------------------------*/
+/**
+ * @brief Converts the input voltage to temperature based on LM35 sensor characteristics.
+ * @param voltage The input voltage measured from the LM35 sensor.
+ * @return The corresponding temperature in Celsius.
+ * @note The LM35 sensor provides a voltage that is linearly proportional to the temperature in Celsius, with a typical scale factor of 10mV per degree Celsius.
+ */
 float LM35_VOLTAGE2TEMP(float voltage);
-float LM35_GetTemp(ADC_HandleTypeDef *hadc);
+
+/**
+ * @brief Gets the current temperature reading from the LM35 sensor using ADC.
+ * @param hadc Pointer to the ADC_HandleTypeDef structure containing ADC configuration.
+ * @param hfilter Pointer to the LM35_Filter_HandleTypeDef structure for filtering temperature readings.
+ * @return The current temperature in Celsius after applying filtering.
+ * @note This function reads the ADC value, converts it to voltage, and then applies a filter to smooth the temperature reading.
+ */
+float LM35_GetTemp(ADC_HandleTypeDef *hadc, LM35_Filter_HandleTypeDef *hfilter);
+
+/**
+ * @brief Updates the temperature filter with a new value.
+ * @param hfilter Pointer to the LM35_Filter_HandleTypeDef structure that holds the filter state.
+ * @param new_value The new temperature value to be added to the filter.
+ * @return The updated filtered temperature value.
+ * @note This function updates the filter state to provide a smoothed temperature value over time, reducing noise from the sensor.
+ */
+float LM35_UpdateFilter(LM35_Filter_HandleTypeDef *hfilter, float new_value);
 
 #endif /* INC_LM35_H_ */

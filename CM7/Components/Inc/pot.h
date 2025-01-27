@@ -36,6 +36,13 @@
 /* Public variables ----------------------------------------------------------*/
 
 /* Public function prototypes ------------------------------------------------*/
+
+/**
+ * @brief Retrieves the raw ADC register value for the potentiometer.
+ * @param hadc Pointer to the ADC_HandleTypeDef structure containing the ADC configuration.
+ * @return The raw ADC register value corresponding to the potentiometer reading.
+ * @note This function reads the ADC register value from the potentiometer, which is used to determine its analog position.
+ */
 uint16_t POT_GetReg(ADC_HandleTypeDef *hadc);
 
 #endif /* INC_POT_H_ */
